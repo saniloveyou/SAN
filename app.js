@@ -60,11 +60,13 @@
   const heldSingles = new Map();
   const activeMidis = new Map();
   const samples = new Map();
+  const rawSamples = new Map();
+  let samplePrefetch = null;
 
   let audioCtx = null;
   let master = null;
   let samplesReady = false;
-  let ready = false;
+  let loadPromise = null;
 
   function midiToNoteName(midi) {
     return NOTE_NAMES[midi % 12] + (Math.floor(midi / 12) - 1);
@@ -122,27 +124,49 @@
       await audioCtx.resume();
     }
     if (!samplesReady) {
+      setStatus("Loading piano");
       await loadSamples();
     }
-    ready = true;
     startBtn.textContent = "Piano is ready";
     startBtn.classList.add("is-ready");
-    if (statusEl.textContent === "Waiting for the first note") {
+    if (statusEl.textContent === "Waiting for the first note" || statusEl.textContent === "Loading piano") {
       setStatus("Press E for E minor");
     }
   }
 
-  async function loadSamples() {
-    const results = await Promise.allSettled(
+  function prefetchSamples() {
+    if (samplePrefetch) return samplePrefetch;
+    samplePrefetch = Promise.allSettled(
       SAMPLE_NAMES.map(async (name) => {
         const response = await fetch(`${SAMPLE_BASE}${name}.mp3`);
         if (!response.ok) throw new Error(name);
-        const raw = await response.arrayBuffer();
-        const buffer = await audioCtx.decodeAudioData(raw);
-        samples.set(parseSampleName(name), buffer);
+        rawSamples.set(name, await response.arrayBuffer());
       })
     );
-    samplesReady = results.some((result) => result.status === "fulfilled");
+    return samplePrefetch;
+  }
+
+  async function loadSamples() {
+    if (samplesReady) return;
+    if (loadPromise) {
+      await loadPromise;
+      return;
+    }
+    loadPromise = (async () => {
+      await prefetchSamples();
+      const decodes = await Promise.allSettled(
+        [...rawSamples.entries()].map(async ([name, raw]) => {
+          const buffer = await audioCtx.decodeAudioData(raw.slice(0));
+          samples.set(parseSampleName(name), buffer);
+        })
+      );
+      samplesReady = decodes.some((result) => result.status === "fulfilled");
+    })();
+    try {
+      await loadPromise;
+    } finally {
+      if (!samplesReady) loadPromise = null;
+    }
   }
 
   function playVoice(midi, velocity = 0.85) {
@@ -221,7 +245,9 @@
 
   async function playChord(id, root, rootMidi, quality) {
     if (heldChords.has(id)) return;
+    heldChords.set(id, null);
     await ensureAudio();
+    if (!heldChords.has(id)) return;
     const midis = chordMidis(rootMidi, quality);
     const voices = midis.map((midi, index) => {
       markMidi(midi, true);
@@ -233,11 +259,13 @@
   }
 
   function releaseChord(id) {
+    if (!heldChords.has(id)) return;
     const held = heldChords.get(id);
-    if (!held) return;
-    held.voices.forEach((voice) => releaseVoice(voice));
-    held.midis.forEach((midi) => markMidi(midi, false));
     heldChords.delete(id);
+    if (held) {
+      held.voices.forEach((voice) => releaseVoice(voice));
+      held.midis.forEach((midi) => markMidi(midi, false));
+    }
     highlightMap(null, null, false);
     if (heldChords.size === 0 && heldSingles.size === 0) {
       setStatus("Ready");
@@ -246,18 +274,22 @@
 
   async function playSingle(midi) {
     if (heldSingles.has(midi)) return;
+    heldSingles.set(midi, null);
     await ensureAudio();
+    if (!heldSingles.has(midi)) return;
     markMidi(midi, true);
     heldSingles.set(midi, playVoice(midi, 0.82));
     setStatus(displayNote(midiToNoteName(midi)));
   }
 
   function releaseSingle(midi) {
+    if (!heldSingles.has(midi)) return;
     const voice = heldSingles.get(midi);
-    if (!voice) return;
-    releaseVoice(voice);
-    markMidi(midi, false);
     heldSingles.delete(midi);
+    if (voice) {
+      releaseVoice(voice);
+      markMidi(midi, false);
+    }
     if (heldChords.size === 0 && heldSingles.size === 0) {
       setStatus("Ready");
     }
@@ -394,4 +426,5 @@
 
   buildKeyboard();
   buildMap();
+  prefetchSamples();
 })();
