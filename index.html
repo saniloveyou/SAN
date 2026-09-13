@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ChordKeys — Play piano chords with one key</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,600;6..96,700&family=Sora:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="atmosphere" aria-hidden="true"></div>
+
+    <main>
+      <section class="hero">
+        <p class="brand">ChordKeys</p>
+        <h1>Play every chord with one key.</h1>
+        <p class="lede">Soft film-ballad piano · letter for minor · Shift for major</p>
+        <div class="cta-row">
+          <button type="button" class="cta" id="start-btn">Begin playing</button>
+        </div>
+        <p class="status" id="status" aria-live="polite">Waiting for the first note</p>
+      </section>
+
+      <section class="piano-stage" aria-label="Piano">
+        <div class="fallboard">
+          <span class="fallboard-mark">ChordKeys</span>
+        </div>
+        <div class="keyboard" id="keyboard"></div>
+      </section>
+
+      <section class="songs" id="songs" aria-label="Self play songs">
+        <h2>Self play</h2>
+        <p>Pick a song, press play, and the piano walks the chords for you.</p>
+        <div class="song-card" data-song="oorumBlood">
+          <div class="song-head">
+            <div>
+              <h3>Oorum Blood</h3>
+              <p class="song-meta">B♭ minor loop · 130 BPM · film pad</p>
+            </div>
+            <button type="button" class="song-play" id="play-oorum" data-song="oorumBlood" aria-pressed="false">
+              Play
+            </button>
+          </div>
+          <ol class="song-steps" id="oorum-steps"></ol>
+        </div>
+      </section>
+
+      <section class="map" id="map">
+        <h2>The key map</h2>
+        <p>Natural notes live on letter keys. Sharps live on 1–5. Shift turns any of them major.</p>
+        <div class="map-list" id="map-list"></div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
