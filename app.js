@@ -65,8 +65,24 @@
 
   let audioCtx = null;
   let master = null;
+  let voiceBus = null;
   let samplesReady = false;
   let loadPromise = null;
+
+  // Soft film-ballad piano: felt highs, warm lows, gentle hall.
+  const BALLAD = {
+    attack: 0.055,
+    release: 1.05,
+    chordVelocity: 0.58,
+    singleVelocity: 0.62,
+    masterGain: 0.88,
+    dryGain: 0.7,
+    wetGain: 0.42,
+    lowpassHz: 3800,
+    warmthDb: 3.2,
+    presenceCutDb: -4.5,
+    airCutDb: -7,
+  };
 
   function midiToNoteName(midi) {
     return NOTE_NAMES[midi % 12] + (Math.floor(midi / 12) - 1);
@@ -82,7 +98,9 @@
 
   function chordMidis(rootMidi, quality) {
     const third = quality === "major" ? 4 : 3;
-    return [rootMidi, rootMidi + third, rootMidi + 7];
+    // Drop the root for a warmer left-hand pad under melody songs.
+    const bass = rootMidi >= 60 ? rootMidi - 12 : rootMidi;
+    return [bass, bass + third + 12, bass + 7 + 12];
   }
 
   function chordLabel(root, quality) {
@@ -113,23 +131,93 @@
     return best;
   }
 
+  function makeImpulseResponse(seconds = 2.4, decay = 2.8) {
+    const rate = audioCtx.sampleRate;
+    const length = Math.floor(rate * seconds);
+    const impulse = audioCtx.createBuffer(2, length, rate);
+    for (let channel = 0; channel < 2; channel += 1) {
+      const data = impulse.getChannelData(channel);
+      for (let i = 0; i < length; i += 1) {
+        const t = i / length;
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, decay);
+      }
+    }
+    return impulse;
+  }
+
+  function buildBalladChain() {
+    voiceBus = audioCtx.createGain();
+    voiceBus.gain.value = 1;
+
+    const warmth = audioCtx.createBiquadFilter();
+    warmth.type = "lowshelf";
+    warmth.frequency.value = 260;
+    warmth.gain.value = BALLAD.warmthDb;
+
+    const softFilter = audioCtx.createBiquadFilter();
+    softFilter.type = "lowpass";
+    softFilter.frequency.value = BALLAD.lowpassHz;
+    softFilter.Q.value = 0.65;
+
+    const presence = audioCtx.createBiquadFilter();
+    presence.type = "peaking";
+    presence.frequency.value = 2600;
+    presence.Q.value = 0.85;
+    presence.gain.value = BALLAD.presenceCutDb;
+
+    const airCut = audioCtx.createBiquadFilter();
+    airCut.type = "highshelf";
+    airCut.frequency.value = 6200;
+    airCut.gain.value = BALLAD.airCutDb;
+
+    const dry = audioCtx.createGain();
+    dry.gain.value = BALLAD.dryGain;
+
+    const wet = audioCtx.createGain();
+    wet.gain.value = BALLAD.wetGain;
+
+    const convolver = audioCtx.createConvolver();
+    convolver.buffer = makeImpulseResponse();
+
+    const reverbFilter = audioCtx.createBiquadFilter();
+    reverbFilter.type = "lowpass";
+    reverbFilter.frequency.value = 5200;
+
+    master = audioCtx.createGain();
+    master.gain.value = BALLAD.masterGain;
+
+    voiceBus.connect(warmth);
+    warmth.connect(softFilter);
+    softFilter.connect(presence);
+    presence.connect(airCut);
+    airCut.connect(dry);
+    airCut.connect(convolver);
+    convolver.connect(reverbFilter);
+    reverbFilter.connect(wet);
+    dry.connect(master);
+    wet.connect(master);
+    master.connect(audioCtx.destination);
+  }
+
   async function ensureAudio() {
     if (!audioCtx) {
       audioCtx = new AudioContext();
-      master = audioCtx.createGain();
-      master.gain.value = 0.9;
-      master.connect(audioCtx.destination);
+      buildBalladChain();
     }
     if (audioCtx.state === "suspended") {
       await audioCtx.resume();
     }
     if (!samplesReady) {
-      setStatus("Loading piano");
+      setStatus("Loading soft piano");
       await loadSamples();
     }
     startBtn.textContent = "Piano is ready";
     startBtn.classList.add("is-ready");
-    if (statusEl.textContent === "Waiting for the first note" || statusEl.textContent === "Loading piano") {
+    if (
+      statusEl.textContent === "Waiting for the first note" ||
+      statusEl.textContent === "Loading piano" ||
+      statusEl.textContent === "Loading soft piano"
+    ) {
       setStatus("Press E for E minor");
     }
   }
@@ -169,12 +257,12 @@
     }
   }
 
-  function playVoice(midi, velocity = 0.85) {
+  function playVoice(midi, velocity = BALLAD.singleVelocity) {
     const now = audioCtx.currentTime;
     const gain = audioCtx.createGain();
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(velocity, now + 0.012);
-    gain.connect(master);
+    gain.gain.exponentialRampToValueAtTime(velocity, now + BALLAD.attack);
+    gain.connect(voiceBus);
 
     const sample = samplesReady ? nearestSample(midi) : null;
     let source = null;
@@ -194,22 +282,23 @@
 
   function startSynthVoice(midi, gain, now) {
     const freq = midiToFreq(midi);
-    const partials = [1, 2, 3, 4.02, 5.04, 6.08];
-    const amps = [0.55, 0.22, 0.12, 0.07, 0.04, 0.025];
+    // Softer fallback tone when samples are unavailable.
+    const partials = [1, 2, 2.99, 4.01];
+    const amps = [0.62, 0.18, 0.08, 0.035];
     partials.forEach((ratio, index) => {
       const osc = audioCtx.createOscillator();
-      osc.type = index < 2 ? "triangle" : "sine";
+      osc.type = "sine";
       osc.frequency.value = freq * ratio;
       const part = audioCtx.createGain();
       part.gain.value = amps[index];
       osc.connect(part);
       part.connect(gain);
       osc.start(now);
-      osc.stop(now + 6);
+      osc.stop(now + 7);
     });
   }
 
-  function releaseVoice(voice, decay = 0.38) {
+  function releaseVoice(voice, decay = BALLAD.release) {
     if (!voice) return;
     const now = audioCtx.currentTime;
     voice.gain.gain.cancelScheduledValues(now);
@@ -251,7 +340,10 @@
     const midis = chordMidis(rootMidi, quality);
     const voices = midis.map((midi, index) => {
       markMidi(midi, true);
-      return playVoice(midi, 0.78 - index * 0.06);
+      // Bass a touch stronger; upper tones sit softer under a melody.
+      const velocity =
+        index === 0 ? BALLAD.chordVelocity : BALLAD.chordVelocity - 0.08 - index * 0.04;
+      return playVoice(midi, Math.max(0.28, velocity));
     });
     heldChords.set(id, { midis, voices });
     setStatus(chordLabel(root, quality));
@@ -278,7 +370,7 @@
     await ensureAudio();
     if (!heldSingles.has(midi)) return;
     markMidi(midi, true);
-    heldSingles.set(midi, playVoice(midi, 0.82));
+    heldSingles.set(midi, playVoice(midi, BALLAD.singleVelocity));
     setStatus(displayNote(midiToNoteName(midi)));
   }
 
