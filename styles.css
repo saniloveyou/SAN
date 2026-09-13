@@ -360,3 +360,131 @@ h1 {
     letter-spacing: 0.16em;
   }
 }
+
+
+.songs {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 3.5rem 1.4rem 0;
+}
+
+.songs h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: clamp(2rem, 5vw, 3.1rem);
+  font-weight: 600;
+  color: var(--ivory);
+}
+
+.songs > p {
+  margin: 0.7rem 0 1.6rem;
+  max-width: 40ch;
+  color: rgba(239, 226, 200, 0.72);
+  line-height: 1.55;
+}
+
+.song-card {
+  padding: 1.15rem 1.2rem 1.25rem;
+  border: 1px solid rgba(224, 178, 90, 0.22);
+  background:
+    linear-gradient(180deg, rgba(224, 178, 90, 0.08), transparent 55%),
+    rgba(20, 10, 6, 0.35);
+}
+
+.song-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.song-card h3 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.55rem;
+  font-weight: 600;
+  color: var(--ivory);
+}
+
+.song-meta {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  color: rgba(239, 226, 200, 0.62);
+}
+
+.song-play {
+  appearance: none;
+  flex: 0 0 auto;
+  border: 1px solid rgba(196, 154, 90, 0.65);
+  background: linear-gradient(180deg, #d8ae66 0%, #b8893d 100%);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 0.88rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.7rem 1.2rem;
+  cursor: pointer;
+  transition: transform 180ms ease, filter 180ms ease, background 180ms ease, color 180ms ease;
+}
+
+.song-play:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.song-play.is-playing {
+  background: transparent;
+  color: var(--amber);
+  border-color: rgba(224, 178, 90, 0.5);
+}
+
+.song-steps {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin: 1.15rem 0 0;
+  padding: 0;
+}
+
+.song-step {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.7rem 0.65rem;
+  border: 1px solid rgba(224, 178, 90, 0.14);
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(239, 226, 200, 0.78);
+  font-size: 0.82rem;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.song-step strong {
+  font-weight: 600;
+  color: var(--ivory);
+}
+
+.song-step kbd {
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  color: var(--amber);
+}
+
+.song-step.is-on {
+  background: rgba(224, 178, 90, 0.16);
+  border-color: rgba(224, 178, 90, 0.45);
+  color: var(--ivory);
+}
+
+@media (max-width: 640px) {
+  .song-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .song-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

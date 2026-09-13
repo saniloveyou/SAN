@@ -50,10 +50,27 @@
     { codes: ["Digit5"], label: "5", root: "A#" },
   ];
 
+  // Self-play loops. Oorum Blood sits in B♭ minor: B♭m – G♭ – E♭m – D♭.
+  const SONGS = {
+    oorumBlood: {
+      title: "Oorum Blood",
+      bpm: 130,
+      beatsPerChord: 4,
+      steps: [
+        { root: "A#", midi: 70, quality: "minor", label: "B♭ minor", hint: "5" },
+        { root: "F#", midi: 66, quality: "major", label: "G♭ major", hint: "⇧3" },
+        { root: "D#", midi: 63, quality: "minor", label: "E♭ minor", hint: "2" },
+        { root: "C#", midi: 61, quality: "major", label: "D♭ major", hint: "⇧1" },
+      ],
+    },
+  };
+
   const keyboardEl = document.getElementById("keyboard");
   const statusEl = document.getElementById("status");
   const startBtn = document.getElementById("start-btn");
   const mapListEl = document.getElementById("map-list");
+  const playOorumBtn = document.getElementById("play-oorum");
+  const oorumStepsEl = document.getElementById("oorum-steps");
 
   const keyEls = new Map();
   const heldChords = new Map();
@@ -68,6 +85,7 @@
   let voiceBus = null;
   let samplesReady = false;
   let loadPromise = null;
+  let autoplay = null;
 
   // Soft film-ballad piano: felt highs, warm lows, gentle hall.
   const BALLAD = {
@@ -413,6 +431,7 @@
     const binding = bindingFromEvent(event);
     if (!binding) return;
     event.preventDefault();
+    if (autoplay) stopAutoplay(false);
     await playChord(event.code, binding.root, binding.midi, qualityFromEvent(event));
   }
 
@@ -500,13 +519,98 @@
     });
   }
 
+  function buildSongSteps() {
+    const song = SONGS.oorumBlood;
+    oorumStepsEl.innerHTML = "";
+    song.steps.forEach((step, index) => {
+      const li = document.createElement("li");
+      li.className = "song-step";
+      li.dataset.index = String(index);
+      li.innerHTML = `<strong>${step.label}</strong><kbd>${step.hint}</kbd>`;
+      oorumStepsEl.appendChild(li);
+    });
+  }
+
+  function setAutoplayUi(playing) {
+    playOorumBtn.textContent = playing ? "Stop" : "Play";
+    playOorumBtn.classList.toggle("is-playing", playing);
+    playOorumBtn.setAttribute("aria-pressed", playing ? "true" : "false");
+    if (!playing) {
+      oorumStepsEl.querySelectorAll(".song-step").forEach((el) => el.classList.remove("is-on"));
+    }
+  }
+
+  function highlightSongStep(index) {
+    oorumStepsEl.querySelectorAll(".song-step").forEach((el) => {
+      el.classList.toggle("is-on", Number(el.dataset.index) === index);
+    });
+  }
+
+  function stopAutoplay(resetStatus = true) {
+    if (!autoplay) return;
+    window.clearTimeout(autoplay.timer);
+    releaseChord(autoplay.chordId);
+    autoplay = null;
+    setAutoplayUi(false);
+    if (resetStatus && heldChords.size === 0 && heldSingles.size === 0) {
+      setStatus("Ready");
+    }
+  }
+
+  async function playAutoplayStep() {
+    if (!autoplay) return;
+    const song = SONGS[autoplay.songId];
+    const step = song.steps[autoplay.index];
+    releaseChord(autoplay.chordId);
+    highlightSongStep(autoplay.index);
+    await playChord(autoplay.chordId, step.root, step.midi, step.quality);
+    if (!autoplay) return;
+    setStatus(`${song.title} · ${step.label}`);
+    autoplay.index = (autoplay.index + 1) % song.steps.length;
+    const waitMs = (60 / song.bpm) * song.beatsPerChord * 1000;
+    autoplay.timer = window.setTimeout(() => {
+      playAutoplayStep();
+    }, waitMs);
+  }
+
+  async function startAutoplay(songId) {
+    await ensureAudio();
+    stopAutoplay(false);
+    releaseAllManual();
+    autoplay = {
+      songId,
+      index: 0,
+      timer: null,
+      chordId: "autoplay",
+    };
+    setAutoplayUi(true);
+    setStatus(`Playing ${SONGS[songId].title}`);
+    await playAutoplayStep();
+  }
+
+  function releaseAllManual() {
+    [...heldChords.keys()].forEach((id) => {
+      if (!autoplay || id !== autoplay.chordId) releaseChord(id);
+    });
+    [...heldSingles.keys()].forEach(releaseSingle);
+  }
+
   function releaseAll() {
+    stopAutoplay(false);
     [...heldChords.keys()].forEach(releaseChord);
     [...heldSingles.keys()].forEach(releaseSingle);
   }
 
   startBtn.addEventListener("click", () => {
     ensureAudio();
+  });
+
+  playOorumBtn.addEventListener("click", async () => {
+    if (autoplay) {
+      stopAutoplay(true);
+      return;
+    }
+    await startAutoplay("oorumBlood");
   });
 
   window.addEventListener("keydown", onKeyDown);
@@ -518,5 +622,6 @@
 
   buildKeyboard();
   buildMap();
+  buildSongSteps();
   prefetchSamples();
 })();
